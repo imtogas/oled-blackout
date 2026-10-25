@@ -37,8 +37,14 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $base = 'C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe'
           if (!(Test-Path $base)) { throw 'AutoHotkey64.exe missing' }
-          & $env:AHK_COMPILER /in OLEDBlackout.ahk /out OLED-Blackout.exe /base $base
-          if ($LASTEXITCODE -ne 0 -or !(Test-Path OLED-Blackout.exe)) { throw 'EXE compilation failed' }
+          Write-Host "Compiler: $env:AHK_COMPILER"
+          Write-Host "Base: $base"
+          # Ahk2Exe returns a nonzero exit code on compiler errors.
+          # Capture all output to make errors visible in GitHub Actions.
+          & $env:AHK_COMPILER /in "$PWD\OLEDBlackout.ahk" /out "$PWD\OLED-Blackout.exe" /base $base /silent 2>&1 | ForEach-Object { Write-Host $_ }
+          $code = $LASTEXITCODE
+          Write-Host "Compiler exit code: $code"
+          if ($code -ne 0 -or !(Test-Path OLED-Blackout.exe)) { throw 'EXE compilation failed; inspect compiler output above' }
       - uses: actions/upload-artifact@v4
         with:
           name: OLED-Blackout-Windows
