@@ -1,0 +1,31 @@
+name: Build Windows EXE
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AutoHotkey v2
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.19/AutoHotkey_2.0.19_setup.exe'
+          Invoke-WebRequest $url -OutFile "$env:TEMP\ahk-setup.exe"
+          Start-Process -FilePath "$env:TEMP\ahk-setup.exe" -ArgumentList '/silent' -Wait
+      - name: Compile EXE
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe'
+          $base = 'C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe'
+          if (!(Test-Path $compiler)) { throw 'Ahk2Exe compiler missing' }
+          if (!(Test-Path $base)) { throw 'AutoHotkey64.exe missing' }
+          & $compiler /in OLEDBlackout.ahk /out OLED-Blackout.exe /base $base
+          if (!(Test-Path OLED-Blackout.exe)) { throw 'Build failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OLED-Blackout-Windows
+          path: OLED-Blackout.exe
