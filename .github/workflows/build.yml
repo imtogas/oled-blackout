@@ -13,18 +13,32 @@ jobs:
       - name: Install AutoHotkey v2
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $url = 'https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.19/AutoHotkey_2.0.19_setup.exe'
           Invoke-WebRequest $url -OutFile "$env:TEMP\ahk-setup.exe"
-          Start-Process -FilePath "$env:TEMP\ahk-setup.exe" -ArgumentList '/silent' -Wait
+          $p = Start-Process -FilePath "$env:TEMP\ahk-setup.exe" -ArgumentList '/silent' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "AutoHotkey setup failed: $($p.ExitCode)" }
+      - name: Download official Ahk2Exe compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ 'User-Agent' = 'OLED-Blackout-CI'; 'Accept' = 'application/vnd.github+json' }
+          $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/AutoHotkey/Ahk2Exe/releases/latest'
+          $asset = $release.assets | Where-Object { $_.name -match '\.zip$' } | Select-Object -First 1
+          if (!$asset) { throw 'Official Ahk2Exe ZIP release asset not found' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$env:TEMP\Ahk2Exe.zip"
+          Expand-Archive "$env:TEMP\Ahk2Exe.zip" -DestinationPath "$env:TEMP\Ahk2Exe" -Force
+          $compiler = Get-ChildItem "$env:TEMP\Ahk2Exe" -Recurse -Filter 'Ahk2Exe.exe' | Select-Object -First 1
+          if (!$compiler) { throw 'Ahk2Exe.exe missing in downloaded archive' }
+          "AHK_COMPILER=$($compiler.FullName)" >> $env:GITHUB_ENV
       - name: Compile EXE
         shell: pwsh
         run: |
-          $compiler = 'C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe'
+          $ErrorActionPreference = 'Stop'
           $base = 'C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe'
-          if (!(Test-Path $compiler)) { throw 'Ahk2Exe compiler missing' }
           if (!(Test-Path $base)) { throw 'AutoHotkey64.exe missing' }
-          & $compiler /in OLEDBlackout.ahk /out OLED-Blackout.exe /base $base
-          if (!(Test-Path OLED-Blackout.exe)) { throw 'Build failed' }
+          & $env:AHK_COMPILER /in OLEDBlackout.ahk /out OLED-Blackout.exe /base $base
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path OLED-Blackout.exe)) { throw 'EXE compilation failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: OLED-Blackout-Windows
